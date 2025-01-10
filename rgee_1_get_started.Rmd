@@ -1,6 +1,8 @@
 ---
 title: "Rladies_taller_rgee"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 
@@ -23,7 +25,7 @@ reticulate::py_discover_config()
 
 ```{r}
 library(reticulate)
-use_condaenv("rgee_test", required = TRUE)
+use_condaenv("rladies_rgee_1", required = TRUE)
 py_config()
 ```
 
@@ -37,11 +39,12 @@ install.packages("geojsonio")
 install.packages("magick")
 #install.packages("numpy")
 ```
-5. instalar rgee
+5. Instalar rgee
 
 ```{r}
 install.packages("remotes")
 ```
+
 ```{r}
 remotes::install_github("r-spatial/rgee", force = TRUE)
 ```
@@ -56,12 +59,14 @@ ee_check()
 7. Inicializar 
 
 ```{r}
+library(rgee)
 ee_clean_user_credentials()
 ee_Authenticate()
-ee_Initialize('ee-urielzan')
+ee_Initialize()
 ```
 
-
+### Pruebas
+1. Acceso a Datasets de GEE
 ```{r}
 createTimeBand <-function(img) {
   year <- ee$Date(img$get('system:time_start'))$get('year')$subtract(1991L) 
@@ -82,8 +87,9 @@ col_reduce <- col_reduce$addBands(
   col_reduce$select('scale'))
 ee_print(col_reduce)
 ```
+
 ```{r}
-Map$setCenter(9.08203, 47.39835, 3)
+Map$setCenter(-92.42830546,18.1816893, 8)
 Map$addLayer(
   eeObject = col_reduce,
   visParams = list(
@@ -95,6 +101,7 @@ Map$addLayer(
 )
 ```
 
+2. Acceso a datos climaticos (precipitacion)
 
 ```{r}
 
@@ -109,7 +116,6 @@ nc <- st_read("C:/Users/urielm/Documents/GitHub/Rladies_taller_rgee/tabasco/taba
 ```
 
 
-
 ```{r}
 terraclimate <- ee$ImageCollection("IDAHO_EPSCOR/TERRACLIMATE") %>%
   ee$ImageCollection$filterDate("2001-01-01", "2002-01-01") %>%
@@ -121,6 +127,7 @@ terraclimate <- ee$ImageCollection("IDAHO_EPSCOR/TERRACLIMATE") %>%
 ```{r}
 ee_nc_rain <- ee_extract(x = terraclimate, y = nc["ENTIDAD"], sf = FALSE)
 ```
+
 ```{r}
 ee_nc_rain %>%
   pivot_longer(-ENTIDAD, names_to = "month", values_to = "pr") %>%
@@ -132,6 +139,7 @@ ee_nc_rain %>%
   theme_minimal()
 ```
 
+3. Animaciones timelapse
 ```{r}
 library(magick)
 library(rgee)
@@ -245,6 +253,6 @@ animation %>%
     font = "arial",
     boxcolor = "#000000"
   ) # -> animation_wtxt
-
+ee_utils_gif_save(animation_wtxt, path = "raster_as_ee.gif")
 ```
 
