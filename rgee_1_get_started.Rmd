@@ -1,0 +1,250 @@
+---
+title: "Rladies_taller_rgee"
+output: html_notebook
+---
+
+
+1. Verificar Rtools
+
+```{r}
+Sys.which('make')
+```
+2. Reticulate 
+
+```{r}
+install.packages('reticulate')
+```
+3. Python a usar
+```{r}
+reticulate::py_available()
+reticulate::py_discover_config()
+```
+
+
+```{r}
+library(reticulate)
+use_condaenv("rgee_test", required = TRUE)
+py_config()
+```
+
+4. Instalar paquetes R
+
+```{r}
+install.packages("sf") # datos vectoriales y rgee depende
+install.packages("mapedit") # mapas interactivos
+install.packages("tmap") # mapas tematicos
+install.packages("geojsonio")
+install.packages("magick")
+#install.packages("numpy")
+```
+5. instalar rgee
+
+```{r}
+install.packages("remotes")
+```
+```{r}
+remotes::install_github("r-spatial/rgee", force = TRUE)
+```
+
+6. Verificar rgee
+
+```{r}
+library(rgee)
+ee_check()
+```
+
+7. Inicializar 
+
+```{r}
+ee_clean_user_credentials()
+ee_Authenticate()
+ee_Initialize('ee-urielzan')
+```
+
+
+```{r}
+createTimeBand <-function(img) {
+  year <- ee$Date(img$get('system:time_start'))$get('year')$subtract(1991L) 
+  ee$Image(year)$byte()$addBands(img)
+}
+```
+
+```{r}
+collection <- ee$
+  ImageCollection('NOAA/DMSP-OLS/NIGHTTIME_LIGHTS')$
+  select('stable_lights')$
+  map(createTimeBand)
+```
+
+```{r}
+col_reduce <- collection$reduce(ee$Reducer$linearFit())
+col_reduce <- col_reduce$addBands(
+  col_reduce$select('scale'))
+ee_print(col_reduce)
+```
+```{r}
+Map$setCenter(9.08203, 47.39835, 3)
+Map$addLayer(
+  eeObject = col_reduce,
+  visParams = list(
+    bands = c("scale", "offset", "scale"),
+    min = 0,
+    max = c(0.18, 20, -0.18)
+  ),
+  name = "stable lights trend"
+)
+```
+
+
+```{r}
+
+library(tidyverse)
+library(rgee)
+library(sf)
+
+ee_Initialize("ee-urielzan")
+```
+```{r}
+nc <- st_read("C:/Users/urielm/Documents/GitHub/Rladies_taller_rgee/tabasco/tabasco.shp", quiet = TRUE)
+```
+
+
+
+```{r}
+terraclimate <- ee$ImageCollection("IDAHO_EPSCOR/TERRACLIMATE") %>%
+  ee$ImageCollection$filterDate("2001-01-01", "2002-01-01") %>%
+  ee$ImageCollection$map(function(x) x$select("pr")) %>% # Select only precipitation bands
+  ee$ImageCollection$toBands() %>% # from imagecollection to image
+  ee$Image$rename(sprintf("PP_%02d",1:12)) # rename the bands of an image
+```
+
+```{r}
+ee_nc_rain <- ee_extract(x = terraclimate, y = nc["ENTIDAD"], sf = FALSE)
+```
+```{r}
+ee_nc_rain %>%
+  pivot_longer(-ENTIDAD, names_to = "month", values_to = "pr") %>%
+  mutate(month, month=gsub("PP_", "", month)) %>%
+  ggplot(aes(x = month, y = pr, group = ENTIDAD, color = pr)) +
+  geom_line(alpha = 0.4) +
+  xlab("Month") +
+  ylab("Precipitation (mm)") +
+  theme_minimal()
+```
+
+```{r}
+library(magick)
+library(rgee)
+library(sf)
+
+ee_Initialize("ee-urielzan")
+```
+
+```{r}
+library(sf)
+library(rgee)
+
+# Cargar shapefile directamente con la ruta absoluta
+mask <- st_read("C:/Users/urielm/Documents/GitHub/Rladies_taller_rgee/tabasco/tabasco.shp", quiet = TRUE) %>%
+  sf_as_ee()
+
+# Obtener los límites de la geometría
+region <- mask$geometry()$bounds()
+```
+
+
+```{r}
+col <- ee$ImageCollection('MODIS/006/MOD13A2')$select('NDVI')
+```
+
+
+```{r}
+col <- col$map(function(img) {
+  doy <- ee$Date(img$get('system:time_start'))$getRelative('day', 'year')
+  img$set('doy', doy)
+})
+distinctDOY <- col$filterDate('2013-01-01', '2014-01-01')
+```
+
+
+```{r}
+filter <- ee$Filter$equals(leftField = 'doy', rightField = 'doy')
+```
+
+
+```{r}
+join <- ee$Join$saveAll('doy_matches')
+joinCol <- ee$ImageCollection(join$apply(distinctDOY, col, filter))
+```
+
+
+```{r}
+comp <- joinCol$map(function(img) {
+  doyCol = ee$ImageCollection$fromImages(
+    img$get('doy_matches')
+  )
+  doyCol$reduce(ee$Reducer$median())
+})
+```
+
+
+```{r}
+visParams = list(
+  min = 0.0,
+  max = 9000.0,
+  bands = "NDVI_median",
+  palette = c(
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+  )
+)
+```
+
+
+```{r}
+rgbVis <- comp$map(function(img) {
+  do.call(img$visualize, visParams) %>%
+    ee$Image$clip(mask)
+})
+```
+
+
+```{r}
+gifParams <- list(
+  region = region,
+  dimensions = 600,
+  crs = 'EPSG:3857',
+  framesPerSecond = 10
+)
+```
+
+
+```{r}
+dates_modis_mabbr <- distinctDOY %>%
+  ee_get_date_ic %>% # Get Image Collection dates
+  '[['("time_start") %>% # Select time_start column
+  lubridate::month() %>% # Get the month component of the datetime
+  '['(month.abb, .) # subset around month abbreviations
+```
+
+
+```{r}
+animation <- ee_utils_gif_creator(rgbVis, gifParams, mode = "wb")
+animation %>%
+  ee_utils_gif_annotate(
+    text = "NDVI: MODIS/006/MOD13A2",
+    size = 15, color = "white",
+    location = "+10+10"
+  ) %>%
+  ee_utils_gif_annotate(
+    text = dates_modis_mabbr,
+    size = 30,
+    location = "+290+350",
+    color = "white",
+    font = "arial",
+    boxcolor = "#000000"
+  ) # -> animation_wtxt
+
+```
+
