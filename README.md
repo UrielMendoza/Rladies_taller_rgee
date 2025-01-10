@@ -20,6 +20,7 @@ rgee es un paquete para R que permite a los usuarios interactuar con la API de G
 rgee es especialmente útil para quienes desean realizar análisis geoespaciales avanzados sin necesidad de aprender JavaScript o cambiar completamente al ecosistema de Python. Proporciona una solución poderosa para integrar datos y análisis de GEE en flujos de trabajo de R.
 
 [Sitio oficial rgee](https://r-spatial.github.io/rgee/)
+
 [Repositorio oficial rgee](https://github.com/r-spatial/rgee)
 
 ### Referencias
